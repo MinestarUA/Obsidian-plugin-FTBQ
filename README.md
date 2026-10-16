@@ -102,6 +102,8 @@ The window has three parts:
 
 The full cheat sheet is behind the **?** button in the toolbar.
 
+The interface is in English. If Obsidian itself is set to Ukrainian (Settings → General → Language), the plugin switches to Ukrainian too.
+
 ### What you can edit
 - **Tasks (15 types):** item, checkmark, kill, location, dimension, biome, structure, advancement, observation, stat, xp, fluid, forge_energy, gamestage, custom.
 - **Rewards (13 types):** item, xp, xp_levels, command, random, choice, all_table, loot, advancement, toast, gamestage, currency, custom.
@@ -139,7 +141,7 @@ Tests against a real questbook run when `FTBQ_CORPUS=<path to ftbquests/quests>`
 1. `npm version 0.3.0` updates `manifest.json` and `versions.json`.
 2. `git push --follow-tags` makes GitHub Actions build the plugin and publish a release with `main.js`, `manifest.json`, `styles.css` and a zip.
 
-How the core works and why: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (in Ukrainian).
+How the core works and why: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 

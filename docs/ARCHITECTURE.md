@@ -1,64 +1,66 @@
-# Архітектура
+# Architecture
 
-## Структура
+## Layout
 
-| Файл | Роль |
+| File | Role |
 |---|---|
-| `src/engine/snbtLexer.ts` | токенізатор FTB-SNBT з офсетами, без втрати тексту між токенами |
-| `src/engine/snbtParser.ts` | SNBT → CST; кожен вузол пам'ятає `origin` (джерело, span, відступ, знімок дітей) |
-| `src/engine/snbtSerializer.ts` | CST → текст: незмінені піддерева копіюються дослівно, змінені пишуться канонічно, як це робить FTB |
-| `src/engine/snbtNodes.ts` | типи вузлів, білдери, хелпери get/set/remove, Java-форматування `double`/`float` |
-| `src/engine/questModel.ts` | типізований погляд на теку quests, глобальний `IdIndex` зі зворотними посиланнями |
-| `src/engine/graphMutator.ts` | CRUD глав/квестів/тасків/нагород, залежності з перевіркою циклів, quest links, snap-to-grid, уникнення колізій |
-| `src/engine/schema.ts` | схема всіх полів FTB Quests 2101.1.x: 15 типів завдань, 13 типів нагород, квест, глава, зображення, таблиця нагород, `data.snbt` |
-| `src/ui/fields.ts` | редактори полів, які будуються зі схеми (bool, tristate, числа, enum, предмет/іконка, рідина, `[I;x,y,z]`, квест, таблиця, теги) |
-| `src/engine/validator.ts` | перевірки схеми й цілісності (унікальні id, «висячі» посилання, цикли, `filename`, сирітські lang-ключі) |
-| `src/state/store.ts` | транзакції, undo/redo на текстових знімках, dirty-tracking, події |
-| `src/sync/fileWatcher.ts` | атомарний запис, оптимістична конкуренція, конфлікти, бекапи, `fs.watch` + polling |
-| `src/main.ts` | плагін Obsidian: налаштування, команди, статус-бар, модалки валідації та конфліктів |
+| `src/engine/snbtLexer.ts` | FTB-SNBT tokenizer with offsets; keeps every character between tokens |
+| `src/engine/snbtParser.ts` | SNBT → CST; every node remembers its `origin` (source, span, indent, snapshot of its children) |
+| `src/engine/snbtSerializer.ts` | CST → text: unchanged subtrees are copied verbatim, changed ones are printed canonically, exactly as FTB prints them |
+| `src/engine/snbtNodes.ts` | node types, builders, get/set/remove helpers, Java-style `double`/`float` formatting |
+| `src/engine/questModel.ts` | typed view of the quests folder; global `IdIndex` with reverse references |
+| `src/engine/graphMutator.ts` | CRUD for chapters, quests, tasks and rewards; dependencies with cycle checks; quest links; snap-to-grid; collision avoidance; images; reward tables; copy/paste |
+| `src/engine/schema.ts` | every field of FTB Quests 2101.1.x: 15 task types, 13 reward types, quest, chapter, image, reward table, `data.snbt` |
+| `src/engine/validator.ts` | schema and integrity checks (unique ids, dangling references, cycles, `filename`, orphaned lang keys) |
+| `src/state/store.ts` | transactions, undo/redo on text snapshots, dirty tracking, events |
+| `src/sync/fileWatcher.ts` | atomic writes, optimistic concurrency, conflicts, backups, `fs.watch` + polling |
+| `src/ui/graphCanvas.ts` | Canvas2D renderer and the FTB-style mouse controls |
+| `src/ui/questView.ts` | the editor view: chapter list, toolbar, inspector, context menus, keyboard shortcuts |
+| `src/ui/fields.ts` | property editors generated from the schema (bool, tristate, numbers, enums, item/icon, fluid, `[I;x,y,z]`, quest, table, tags) |
+| `src/i18n.ts` | UI strings: English by default, Ukrainian when Obsidian runs in Ukrainian |
+| `src/main.ts` | the Obsidian plugin: settings, commands, status bar, validation and conflict dialogs |
 
+## Design decisions and risks
 
-## Оцінка архітектурних ризиків
+The original proposal was *"a pure TypeScript AST parser in the renderer process, writing every change synchronously to `.snbt`, with an HTML5 Canvas UI"*.
 
-Запропоновано: *«чистий TS AST-парсер у renderer-процесі, синхронний запис у `.snbt` на кожну зміну, HTML5 Canvas UI»*.
+### 1. SNBT compatibility and data loss
+- **How real the danger is.** The FTB reader ignores key order and whitespace, accepts both commas and newlines, and coerces numeric types itself.
+  Player progress is stored in the world save, keyed by object id, not in these files.
+  So reordering keys or reformatting will **not** break the game. Three things actually are dangerous:
+  1. dropping unknown fields: `components`, `"irons_spellbooks:spell_container"`, filters;
+  2. changing the id of an existing object, which resets progress;
+  3. leaving dangling references.
+- **Why an AST is not enough.** An AST loses formatting by definition, so this project uses a **CST**. A number is stored as text plus its type (`b s i L f d`) and never passes through a JS `number` until it is edited.
+  `true/false` stay booleans instead of becoming `1b`. Keys are not re-sorted; a new key is inserted at its sorted position.
+- **Guarantee.** On a real modpack (18 files, 13 chapters, a 224 KB lang file) `parse → serialize` reproduces every file byte for byte.
+  Even the *canonical* mode, which ignores the original layout entirely, reproduces them byte for byte, so the printer matches what FTB writes.
+  Editing changes only the edited lines, and the tests cover this.
+- **What blocks a save:**
+  1. Round-trip: the saved text must parse back to the same text.
+  2. Validator: saving is refused if an edit introduced **new** errors. Errors that were already in the files when they were loaded are shown as warnings only; otherwise existing files could never be saved.
+  3. Immutable ids: `setField(..., "id")` throws, and `moveQuestToChapter` keeps the id.
 
-### 1. Сумісність SNBT і ризик втрати даних
-- **Наскільки реальна небезпека.** Рідер FTB ігнорує порядок ключів і пробіли, приймає і коми, і переноси рядків, а числові типи приводить сам.
-  Прогрес гравців зберігається у світі за id об'єктів, а не в цих файлах.
-  Тож перестановка ключів чи інше форматування гру **не зламає**. Насправді небезпечні три речі:
-  1. викинути невідомі поля: `components`, `"irons_spellbooks:spell_container"`, фільтри;
-  2. змінити id наявного об'єкта, бо це скидає прогрес;
-  3. залишити «висячі» посилання.
-- **Чому AST недостатньо.** AST за визначенням втрачає форматування, тому тут **CST**. Число зберігається як текст плюс тип (`b s i L f d`) і ніколи не проходить через JS `number`, поки його не змінять.
-  `true/false` лишаються булевими, а не `1b`. Ключі не сортуються наново: новий ключ вставляється у відсортовану позицію.
-- **Гарантія.** На всіх 18 реальних файлах (13 глав, 224 KB `uk_ua.snbt`) `parse → serialize` дає побайтово той самий текст.
-  Навіть *канонічний* режим, який повністю ігнорує вихідний layout, відтворює їх побайтово, тобто принтер збігається з тим, що пише FTB.
-  Редагування міняє лише відредаговані рядки, і це покрито тестами.
-- **Що блокує збереження:**
-  1. Round-trip: збережений текст має розпарситися назад у той самий текст.
-  2. Валідатор: зберегти не можна, якщо з'явилися **нові** помилки. Ті, що вже були у файлах на момент завантаження, лише показуються як попередження, інакше чинні файли ніколи не вдалося б зберегти.
-  3. id незмінні: `setField(..., "id")` кидає помилку, а `moveQuestToChapter` зберігає id.
+### 2. Sync collisions (Minecraft / git)
+- "Synchronous write on every change" was **rejected**. It blocks the renderer, writes half-finished edits and is guaranteed to collide with Minecraft and git.
+  Transactions are written on an explicit *Save* or by a debounced autosave instead.
+- **Atomic writes:** a temp file `.<name>.snbt.<pid>.<ts>.tmp` in the same folder, then fsync and rename.
+  The name does not end in `.snbt`, so FTB never loads it as a chapter.
+- **Optimistic concurrency.** The last text seen on disk is remembered for every file. Before writing, each dirty file is re-read from disk; if it differs, the file becomes a conflict and is **not overwritten**.
+  Any conflict blocks saving the *whole* project, because a single quest edit touches both the chapter and the lang file.
+- **External changes.** A clean file reloads silently. A file with unsaved edits becomes a conflict with a choice of "Keep mine" or "Take disk version".
+  Events are debounced by 300 ms, so a git checkout triggers a single pass. The plugin recognises and ignores its own writes. Polling on mtime catches events `fs.watch` misses.
+- **Backups.** Before every write, the previous on-disk version goes to `backups/<timestamp>/` in the plugin folder (the last N are kept; the folder is git-ignored).
+- ⚠️ **Minecraft limitation.** FTB keeps quests in memory and rewrites the files when you edit in game. After saving in Obsidian, run `/ftbquests reload`.
+  If the game overwrites a file you have just saved, the plugin notices and warns you.
 
-### 2. Колізії синхронізації (Minecraft / git)
-- «Синхронний запис на кожну зміну» **відхилено**. Він блокує renderer, пише напівготові правки і гарантовано перетинається з Minecraft і git.
-  Натомість транзакції пишуться явним *Save* або автозбереженням з debounce.
-- **Атомарний запис:** тимчасовий файл `.<name>.snbt.<pid>.<ts>.tmp` у тій самій теці, потім fsync і rename.
-  Ім'я не закінчується на `.snbt`, тож FTB ніколи не завантажить його як главу.
-- **Оптимістична конкуренція.** Для кожного файлу запам'ятовується останній бачений дисковий текст. Перед записом кожен dirty-файл перечитується з диска; якщо він відрізняється, файл стає конфліктом і **не перезаписується**.
-  Будь-який конфлікт блокує збереження *всього* проєкту, бо одна правка квесту зачіпає і главу, і lang-файл.
-- **Зовнішні зміни.** Чистий файл перезавантажується мовчки. Файл із незбереженими правками стає конфліктом із вибором «Keep mine» або «Take disk version».
-  Події групуються з debounce 300 мс, тож git checkout дає один прохід. Власні записи розпізнаються й ігноруються. Polling за mtime ловить події, які пропустив `fs.watch`.
-- **Бекапи.** Перед кожним записом попередня дискова версія кладеться в `backups/<timestamp>/` теки плагіна (зберігаються останні N, тека в `.gitignore`).
-- ⚠️ **Обмеження Minecraft.** FTB тримає квести в пам'яті і перезаписує файли при редагуванні в грі. Після збереження в Obsidian треба виконати `/ftbquests reload`.
-  Якщо гра перезапише щойно збережений файл, плагін це помітить і покаже попередження.
+### 3. Canvas or SVG
+FTB shows one chapter at a time, and the largest chapter in a big modpack has around 200 quests.
+SVG/DOM is comfortable up to roughly 1–2k nodes, while Canvas wins at pan/zoom with thousands of edges.
+**Chosen:** Canvas2D (redraw via requestAnimationFrame, culling of off-screen nodes) plus a DOM properties panel.
 
-### 3. Canvas чи SVG
-FTB показує одну главу за раз; найбільша глава в збірці має ~200 квестів.
-SVG/DOM комфортний десь до 1–2 тис. вузлів, а Canvas виграє на pan/zoom із тисячами ребер.
-**Зроблено так:** Canvas2D (перемальовка через requestAnimationFrame, відсікання вузлів поза екраном) + DOM-панель властивостей.
-
-## Відомі обмеження / неперевірене
-- Формат `table_id` для reward tables у 1.21 не перевірено, тому підтримуються і рядок, і long. Тека `reward_tables/` у зразку порожня.
-- Розбиття lang-файлів по главах у новіших FTB (`lang/<locale>/*.snbt`) не перевірено: файли читаються, нові ключі пишуться в `lang/<locale>.snbt`.
-- `uk_ua_old.snbt` завантажується як окрема «локаль»; FTB, імовірно, теж його читає, тож краще його прибрати.
-- 3-way merge при конфлікті не зроблено: є лише «Keep mine / Take disk version».
+## Known limitations / unverified
+- The `table_id` format for reward tables in 1.21 is not verified against real data, so both a string and a long are accepted.
+- Per-chapter lang files in newer FTB builds (`lang/<locale>/*.snbt`) are not verified: they are read, but new keys are written to `lang/<locale>.snbt`.
+- Extra lang files such as `uk_ua_old.snbt` are loaded as a separate "locale"; FTB probably reads them too, so it is better to remove them.
+- There is no 3-way merge for conflicts, only "Keep mine / Take disk version".

@@ -3,6 +3,7 @@
  * and turns user input into typed SNBT nodes (or removals, for default values).
  */
 
+import { t as tr } from "../i18n";
 import { Setting } from "obsidian";
 import { fieldNode, intArray, isDefault, type FieldDef } from "../engine/schema";
 import { idOf } from "../engine/questModel";
@@ -18,7 +19,7 @@ export interface FieldHost {
 	rewardTables(): { id: string; label: string }[];
 }
 
-const TRI_LABELS: Record<string, string> = { "": "(за замовчуванням)", true: "так", false: "ні" };
+const TRI_LABELS: Record<string, string> = { "": tr("(default)"), true: tr("yes"), false: tr("no") };
 
 /** Raw scalar of a node for display. */
 function scalar(n: SnbtNode | undefined): string | number | boolean | undefined {
@@ -65,7 +66,7 @@ function renderField(el: HTMLElement, node: CompoundNode, f: FieldDef, host: Fie
 		case "enum":
 		case "int_enum":
 			s.addDropdown((d) => {
-				for (const o of f.options ?? []) d.addOption(o, o || "(порожньо)");
+				for (const o of f.options ?? []) d.addOption(o, o || tr("(empty)"));
 				const v = String(value ?? f.def ?? "");
 				if (!(f.options ?? []).includes(v)) d.addOption(v, v);
 				d.setValue(v);
@@ -93,13 +94,13 @@ function renderField(el: HTMLElement, node: CompoundNode, f: FieldDef, host: Fie
 		case "text": {
 			const input = f.type === "text" ? s.controlEl.createEl("textarea") : s.controlEl.createEl("input", { type: "text" });
 			input.value = typeof value === "string" ? value : "";
-			if (f.hint) input.placeholder = `${f.hint} id, напр. ${f.def ?? ""}`;
+			if (f.hint) input.placeholder = tr("{hint} id, e.g. {def}", { hint: f.hint, def: String(f.def ?? "") });
 			input.addEventListener("change", () => put(input.value));
 			if (f.type === "string") input.addEventListener("keydown", (e) => (e as KeyboardEvent).key === "Enter" && input.blur());
 			break;
 		}
 		case "tags": {
-			const input = s.controlEl.createEl("input", { type: "text", placeholder: "через кому" });
+			const input = s.controlEl.createEl("input", { type: "text", placeholder: tr("comma-separated") });
 			input.value = cur?.kind === "list" ? stringItems(cur).join(", ") : "";
 			input.addEventListener("change", () => {
 				const tags = input.value.split(",").map((t) => t.trim()).filter(Boolean);
@@ -111,9 +112,9 @@ function renderField(el: HTMLElement, node: CompoundNode, f: FieldDef, host: Fie
 		case "icon": {
 			const stack = cur?.kind === "compound" ? cur : undefined;
 			const id = stack ? getString(stack, "id") : cur?.kind === "string" ? cur.value : undefined;
-			s.setDesc(id ?? (f.type === "icon" ? "(автоматично)" : "—"));
+			s.setDesc(id ?? (f.type === "icon" ? tr("(automatic)") : "—"));
 			s.addButton((b) =>
-				b.setButtonText(id ? "Змінити" : "Обрати").onClick(() =>
+				b.setButtonText(id ? tr("Change") : tr("Choose")).onClick(() =>
 					host.pickItem((newId) => {
 						// Only the id changes: components (names, enchantments, filters) are kept.
 						const copy = stack ? cloneNode(stack) : compound(f.type === "item" ? { count: int(1), id: str(newId) } : { id: str(newId) }, f.type === "item");
@@ -122,7 +123,7 @@ function renderField(el: HTMLElement, node: CompoundNode, f: FieldDef, host: Fie
 					}),
 				),
 			);
-			if (f.type === "icon" && cur) s.addExtraButton((b) => b.setIcon("x").setTooltip("Прибрати").onClick(() => host.commit({ [f.key]: undefined })));
+			if (f.type === "icon" && cur) s.addExtraButton((b) => b.setIcon("x").setTooltip(tr("Remove")).onClick(() => host.commit({ [f.key]: undefined })));
 			break;
 		}
 		case "fluid": {
@@ -149,14 +150,14 @@ function renderField(el: HTMLElement, node: CompoundNode, f: FieldDef, host: Fie
 		case "quest": {
 			const id = typeof value === "string" ? value : "";
 			s.setDesc(id ? host.questLabel(id) : "—");
-			s.addButton((b) => b.setButtonText(id ? "Змінити" : "Обрати").onClick(() => host.pickQuest((q) => host.commit({ [f.key]: str(q) }))));
-			if (id) s.addExtraButton((b) => b.setIcon("x").setTooltip("Прибрати").onClick(() => host.commit({ [f.key]: f.always ? str("") : undefined })));
+			s.addButton((b) => b.setButtonText(id ? tr("Change") : tr("Choose")).onClick(() => host.pickQuest((q) => host.commit({ [f.key]: str(q) }))));
+			if (id) s.addExtraButton((b) => b.setIcon("x").setTooltip(tr("Remove")).onClick(() => host.commit({ [f.key]: f.always ? str("") : undefined })));
 			break;
 		}
 		case "table": {
 			const current = idOf(cur) ?? "";
 			s.addDropdown((d) => {
-				d.addOption("", "— оберіть —");
+				d.addOption("", tr("— choose —"));
 				for (const t of host.rewardTables()) d.addOption(t.id, t.label);
 				if (current && !host.rewardTables().some((t) => t.id === current)) d.addOption(current, `⚠ ${current}`);
 				d.setValue(current);

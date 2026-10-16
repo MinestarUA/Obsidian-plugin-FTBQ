@@ -69,13 +69,13 @@ const OTHER = `{
 }
 `;
 const LANG = `{
-	chapter.1111111111111111.title: "Вступ"
-	quest.AAAAAAAAAAAAAAAA.title: "Перший"
+	chapter.1111111111111111.title: "Intro"
+	quest.AAAAAAAAAAAAAAAA.title: "First"
 	quest.BBBBBBBBBBBBBBBB.quest_desc: [
-		"рядок 1"
-		"рядок 2"
+		"line 1"
+		"line 2"
 	]
-	quest.BBBBBBBBBBBBBBBB.title: "Другий"
+	quest.BBBBBBBBBBBBBBBB.title: "Second"
 }
 `;
 
@@ -100,12 +100,12 @@ test("fixture is valid", () => {
 
 test("create quest: snapped, collision-free, fresh ids, FTB layout", () => {
 	const s = fixture();
-	const id = s.transact("create", (m) => m.createQuest("1111111111111111", { x: 0.1, y: 0.2, title: "Новий", tasks: [itemTask("minecraft:stone", 4)] }));
+	const id = s.transact("create", (m) => m.createQuest("1111111111111111", { x: 0.1, y: 0.2, title: "New", tasks: [itemTask("minecraft:stone", 4)] }));
 	const q = s.index().get(id)!;
 	assert.equal(q.kind, "quest");
 	assert.notEqual(getNumber(q.node, "x") === 0 && getNumber(q.node, "y") === 0, true, "moved off the occupied origin");
 	assert.ok(Number.isInteger(getNumber(q.node, "x")! * 2) && Number.isInteger(getNumber(q.node, "y")! * 2), "snapped to 0.5 grid");
-	assert.equal(s.reader().getText("quest", id, "title"), "Новий");
+	assert.equal(s.reader().getText("quest", id, "title"), "New");
 	const text = s.textOf("chapters/intro.snbt")!;
 	assert.match(text, new RegExp(`\\t\\t\\{\\n\\t\\t\\tid: "${id}"\\n\\t\\t\\ttasks: \\[\\{\\n\\t\\t\\t\\tcount: 4L\\n\\t\\t\\t\\tid: "[0-9A-F]{16}"\\n\\t\\t\\t\\titem: \\{ count: 1, id: "minecraft:stone" \\}\\n\\t\\t\\t\\ttype: "item"\\n\\t\\t\\t\\}\\]`));
 	assert.deepEqual(s.validate(), []);
@@ -141,8 +141,8 @@ test("duplicate quest: new ids everywhere, lang copied, upstream deps kept", () 
 	assert.deepEqual(stringItems(getList(q.node, "dependencies")), ["AAAAAAAAAAAAAAAA"]);
 	const taskIds = getList(q.node, "tasks")!.items.map((t) => getString(t as CompoundNode, "id"));
 	assert.ok(!taskIds.includes("BBBBBBBBBBBBBBB1"));
-	assert.equal(s.reader().getText("quest", copy, "title"), "Другий");
-	assert.deepEqual(s.reader().getText("quest", copy, "quest_desc"), ["рядок 1", "рядок 2"]);
+	assert.equal(s.reader().getText("quest", copy, "title"), "Second");
+	assert.deepEqual(s.reader().getText("quest", copy, "quest_desc"), ["line 1", "line 2"]);
 	assert.deepEqual(s.validate(), []);
 });
 
@@ -151,7 +151,7 @@ test("undo/redo restore files byte-for-byte", () => {
 	const before = new Map([...s.files.keys()].map((p) => [p, s.textOf(p)]));
 	s.transact("move", (m) => m.moveQuest("AAAAAAAAAAAAAAAA", 5, 5));
 	s.transact("reward", (m) => m.addReward("AAAAAAAAAAAAAAAA", itemReward("minecraft:diamond", 2)));
-	s.transact("chapter", (m) => m.createChapter({ filename: "new_one", title: "Нова" }));
+	s.transact("chapter", (m) => m.createChapter({ filename: "new_one", title: "New one" }));
 	const after = new Map([...s.files.keys()].map((p) => [p, s.textOf(p)]));
 	assert.match(s.textOf("chapters/intro.snbt")!, /rewards: \[\{\n\t\t\t\tcount: 2\n\t\t\t\tid: "[0-9A-F]{16}"\n\t\t\t\titem: \{\n\t\t\t\t\tcount: 1\n/);
 	s.undo();
@@ -240,7 +240,7 @@ test("reorder tasks, chapters, chapter groups; images; reward tables; data.snbt"
 		m.moveChapter("2222222222222222", -1);
 		assert.equal(getNumber(store.index().get("2222222222222222")!.node, "order_index"), 0);
 		assert.equal(getNumber(store.index().get("1111111111111111")!.node, "order_index"), 1);
-		const g = m.createChapterGroup("Друга");
+		const g = m.createChapterGroup("Second group");
 		m.moveChapterGroup(g, -1);
 		m.setChapterGroup("2222222222222222", g);
 		m.deleteChapterGroup(g);
@@ -249,7 +249,7 @@ test("reorder tasks, chapters, chapter groups; images; reward tables; data.snbt"
 		m.setImageField("1111111111111111", i, "alpha", undefined);
 		m.duplicateImage("1111111111111111", i);
 		m.removeImage("1111111111111111", i);
-		const table = m.createRewardTable("loot", "Лут");
+		const table = m.createRewardTable("loot", "Loot");
 		const r = m.addTableReward(table, itemReward("minecraft:diamond"));
 		m.setTableRewardField(table, r, "weight", undefined);
 		m.removeTableReward(table, r);

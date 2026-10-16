@@ -1,3 +1,4 @@
+import { t as tr } from "./i18n";
 import { App, FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
@@ -45,7 +46,7 @@ export default class FtbQuestsEditorPlugin extends Plugin {
 		this.resetAssets();
 
 		this.registerView(VIEW_TYPE, (leaf) => new QuestGraphView(leaf, this));
-		this.addRibbonIcon("git-fork", "FTB Quests: граф квестів", () => void this.openGraph());
+		this.addRibbonIcon("git-fork", tr("FTB Quests: quest graph"), () => void this.openGraph());
 		this.addCommand({ id: "open-graph", name: "Open quest graph editor", callback: () => void this.openGraph() });
 
 		this.addCommand({ id: "reload", name: "Reload quests from disk", callback: () => this.confirmReload() });
