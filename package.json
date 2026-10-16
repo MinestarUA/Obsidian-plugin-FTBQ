@@ -1,6 +1,6 @@
 {
   "name": "ftbquests-editor",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Visual, lossless two-way editor for FTB Quests SNBT files inside Obsidian.",
