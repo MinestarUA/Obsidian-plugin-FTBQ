@@ -1,0 +1,9 @@
+{
+	"id": "ftbquests-editor",
+	"name": "FTB Quests Editor",
+	"version": "0.2.1",
+	"minAppVersion": "1.5.0",
+	"description": "Visual, lossless two-way editor for FTB Quests (.snbt) questbooks — edit chapters, quests, tasks, rewards and dependencies without launching Minecraft.",
+	"author": "ProstoMaslo",
+	"isDesktopOnly": true
+}

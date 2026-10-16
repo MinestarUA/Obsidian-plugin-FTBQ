@@ -1,0 +1,34 @@
+name: Release
+
+# Push a tag equal to manifest.json "version" (e.g. `git tag 0.2.0 && git push origin 0.2.0`)
+# and this builds the plugin and publishes main.js, manifest.json, styles.css and a ready-to-unzip archive.
+on:
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Package
+        run: |
+          mkdir -p dist/ftbquests-editor
+          cp main.js manifest.json styles.css dist/ftbquests-editor/
+          (cd dist && zip -r ftbquests-editor-${GITHUB_REF_NAME}.zip ftbquests-editor)
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes \
+            main.js manifest.json styles.css dist/ftbquests-editor-${GITHUB_REF_NAME}.zip
